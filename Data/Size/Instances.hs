@@ -10,6 +10,7 @@ import           Data.Size.Base
 
 import qualified Data.IntMap    as IM
 import qualified Data.IntSet    as IS
+import qualified Data.Map       as M
 
 -- ----------------------------------------
 
@@ -109,5 +110,30 @@ instance Sizeable v => Sizeable (IM.IntMap v) where
               IM.foldr' ((<>) . statsof) mempty m
         where
           len = IM.size m
+
+-- --------------------
+
+instance (Sizeable k, Sizeable v) => Sizeable (M.Map k v) where
+    sizeof m
+        | M.null m
+            = mksize 0
+        | otherwise
+            = len .*. mksize 5
+              <>
+              M.foldWithKey (\ k v st -> sizeof k <> sizeof v <> st) mempty m
+        where
+          len   = M.size m
+
+    statsof m
+        | M.null m
+            = mkstats m "Tip" 0
+        | otherwise
+            = (len + 1) .*. mkstats m "Tip" 0
+              <>
+              len .*. mkstats m "Bin" 5
+              <>
+              M.foldWithKey (\ k v st -> statsof k <> statsof v <> st) mempty m
+        where
+          len = M.size m
 
 -- ------------------------------------------------------------

@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                data-size
-version:             0.1.0.0
+version:             0.1.0.1
 synopsis:            Profiling of data structures
 description:         Profiling of data structures
                      for counting the object allocated for a value
