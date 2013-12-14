@@ -2,17 +2,18 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                data-size
-version:             0.1.0.1
+version:             0.1.0.2
 synopsis:            Profiling of data structures
 description:         Profiling of data structures
-                     for counting the object allocated for a value
-                     and estimating the size.
-                     Statistics for every type and constructor are gathered.
+                     for counting the # of object allocated for a value
+                     and estimating the total # of words used for a value.
+                     Statistics for every type or constructor
+                     occuring as component or subcomponent are gathered.
 license:             MIT
 -- license-file:        LICENSE
 author:              Uwe Schmidt
 maintainer:          uwe@fh-wedel.de
-copyright:           Uwe Schmidt 2013
+copyright:           2013 Uwe Schmidt
 category:            Testing
 build-type:          Simple
 -- extra-source-files:  

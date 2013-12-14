@@ -21,6 +21,71 @@ instance Sizeable Double where
 
 -- --------------------
 
+instance (Sizeable t1, Sizeable t2) => Sizeable (t1, t2) where
+    nameof (x1, x2)
+           = concat ["("
+                    , nameof x1
+                    , ","
+                    , nameof x2
+                    , ")"
+                    ]
+    sizeof (x1, x2)
+        = mksize 2
+          <>
+          sizeof x1 <> sizeof x2
+    statsof xs@(x1, x2)
+        = mkstats xs "" 2
+          <>
+          statsof x1 <> statsof x2
+
+-- --------------------
+
+instance (Sizeable t1, Sizeable t2, Sizeable t3) =>
+         Sizeable (t1, t2, t3) where
+    nameof (x1, x2, x3)
+           = concat ["("
+                    , nameof x1
+                    , ","
+                    , nameof x2
+                    , ","
+                    , nameof x3
+                    , ")"
+                    ]
+    sizeof (x1, x2, x3)
+        = mksize 3
+          <>
+          sizeof x1 <> sizeof x2 <> sizeof x3
+    statsof xs@(x1, x2, x3)
+        = mkstats xs "" 3
+          <>
+          statsof x1 <> statsof x2 <> statsof x3
+
+-- --------------------
+
+instance (Sizeable t1, Sizeable t2, Sizeable t3, Sizeable t4) =>
+         Sizeable (t1, t2, t3, t4) where
+    nameof (x1, x2, x3, x4)
+           = concat ["("
+                    , nameof x1
+                    , ","
+                    , nameof x2
+                    , ","
+                    , nameof x3
+                    , ","
+                    , nameof x4
+                    , ")"
+                    ]
+    sizeof (x1, x2, x3, x4)
+        = mksize 4
+          <>
+          sizeof x1 <> sizeof x2 <> sizeof x3 <> sizeof x4
+    statsof xs@(x1, x2, x3, x4)
+        = mkstats xs "" 4
+          <>
+          statsof x1 <> statsof x2 <> statsof x3 <> statsof x4
+
+-- --------------------
+
 instance Sizeable a => Sizeable [a] where
     nameof xs
         = listTypeName (nameof (head xs))
