@@ -18,6 +18,8 @@ instance Sizeable Bool   where
 instance Sizeable Int    where
 instance Sizeable Char   where
 instance Sizeable Double where
+    sizeof _  = mksize       (64 `div` bitsPerWord)
+    statsof x = mkstats x "" (64 `div` bitsPerWord)
 
 -- --------------------
 

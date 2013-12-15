@@ -17,11 +17,15 @@ infix  7 .*.
 
 -- --------------------
 
-bitsPerWord :: Int
-bitsPerWord = 64
-
 bytesPerWord :: Int
-bytesPerWord = 8
+bytesPerWord = bitsPerWord `div` 8
+
+bitsPerWord :: Int
+bitsPerWord = cnt 1 $ iterate (*2) (1::Int)
+    where
+      cnt i (x : xs)
+          | x < 0 = i
+          | otherwise = cnt (i+1) xs
 
 -- --------------------
 
@@ -180,8 +184,8 @@ showstats (SST name cnt (ST parts))
         ! widthObj  = 16 `max` length col2
         ! widthWord = 16 `max` length col3
         col1 = "type/constructor"
-        col2 = "# objects"
-        col3 = "# words"
+        col2 = "# object"
+        col3 = "# word" ++ show bitsPerWord
         header
             = [l1, l2, l3]
               where
