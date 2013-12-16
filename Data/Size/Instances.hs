@@ -8,9 +8,10 @@ import qualified Data.List      as L
 import           Data.Monoid
 import           Data.Size.Base
 
-import qualified Data.IntMap    as IM
-import qualified Data.IntSet    as IS
-import qualified Data.Map       as M
+import qualified Data.ByteString as BS
+import qualified Data.IntMap     as IM
+import qualified Data.IntSet     as IS
+import qualified Data.Map        as M
 
 -- ----------------------------------------
 
@@ -202,5 +203,14 @@ instance (Sizeable k, Sizeable v) => Sizeable (M.Map k v) where
               M.foldWithKey (\ k v st -> statsof k <> statsof v <> st) mempty m
         where
           len = M.size m
+
+-- --------------------
+
+instance Sizeable BS.ByteString where
+    sizeof s
+        = mksize (3 + (BS.length s + bytesPerWord -1) `div` bytesPerWord)
+
+    statsof s
+        = mkstats s "" (3 + (BS.length s + bytesPerWord -1) `div` bytesPerWord)
 
 -- ------------------------------------------------------------
