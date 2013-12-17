@@ -1,8 +1,29 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Data.Size.Base
-    ( module Data.Size.Base
-    , module Data.Monoid
+    ( Size
+    , SizeTable
+    , SizeStatistics
+    , Sizeable(..)
+
+    , bitsPerWord
+    , bytesPerWord
+    , bytesToWords
+    , mksize
+    , dataSize
+    , singletonSize
+
+    , (.*.)
+    , setName
+    , addSize
+    , addPart
+    , mkstats
+    , showstats
+
+    , mempty            -- re-export of Monoid
+    , mappend
+    , mconcat
+    , (<>)
     )
 where
 
@@ -147,17 +168,6 @@ class Typeable a => Sizeable a where
 
     sizeof _  = mksize       1  -- defaults for primitive types
     statsof x = mkstats x "" 1  --     "     "      "       "
-
--- --------------------
-
-nameof' :: Typeable a => a -> String
-nameof' x
-    | m == "GHC.Types" = n
-    | otherwise        = m ++ "." ++ n
-      where
-        t = fst . splitTyConApp . typeOf $ x
-        m = tyConModule t
-        n = tyConName t
 
 -- ------------------------------------------------------------
 

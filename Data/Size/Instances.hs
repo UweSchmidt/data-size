@@ -5,7 +5,6 @@ module Data.Size.Instances
 where
 
 import qualified Data.List            as L
-import           Data.Monoid
 import           Data.Size.Base
 
 import qualified Data.ByteString      as BS
