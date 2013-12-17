@@ -26,6 +26,8 @@ bitsPerWord = cnt 1 $ iterate (*2) (1::Int)
       cnt i (x : xs)
           | x < 0 = i
           | otherwise = cnt (i+1) xs
+      cnt _ _                           -- just to turn of pattern match warning
+          = undefined
 
 bytesToWords :: Int -> Int
 bytesToWords i = (i + bytesPerWord - 1) `div` bytesPerWord
@@ -49,12 +51,12 @@ data Size
 
 mksize :: Int -> Size
 mksize 0 = singletonSize
-mksize n = Size 1 (n + 1)		-- one word for constructor
+mksize n = Size 1 (n + 1)               -- one word for constructor
 
 -- get the # of words for the data fields of a value
 
 dataSize :: Size -> Int
-dataSize (Size _o w) = (w - 1) `max` 0	-- decrement constructor size
+dataSize (Size _o w) = (w - 1) `max` 0  -- decrement constructor size
 
 -- | The size value of a singleton
 --
@@ -65,10 +67,10 @@ singletonSize = Size 1 0
 
 instance Monoid Size where
     mempty
-        = singletonSize		-- Size 0 0
+        = singletonSize         -- Size 0 0
     mappend c1@(Size o1 w1) c2@(Size o2 w2)
-        | c1 == singletonSize = c2	-- singletons don't accumulate
-        | c2 == singletonSize = c1	--     "        "       "
+        | c1 == singletonSize = c2      -- singletons don't accumulate
+        | c2 == singletonSize = c1      --     "        "       "
         | otherwise           = Size (o1 + o2) (w1 + w2)
     mconcat
         = L.foldl' mappend mempty
@@ -143,8 +145,8 @@ class Typeable a => Sizeable a where
           m = tyConModule t
           n = tyConName t
 
-    sizeof _  = mksize       1	-- defaults for primitive types
-    statsof x = mkstats x "" 1	--     "     "      "       "
+    sizeof _  = mksize       1  -- defaults for primitive types
+    statsof x = mkstats x "" 1  --     "     "      "       "
 
 -- --------------------
 
@@ -181,7 +183,7 @@ mkstats x cn w
     = st3
     where
       n = nameof x
-      cnt = Size 1 (if w == 0 then 0 else w + 1)	-- overhead for tagfield
+      cnt = Size 1 (if w == 0 then 0 else w + 1)        -- overhead for tagfield
       st1 = addSize cnt $ setName n $ mempty
       st2 = addPart n cnt st1
       st3 | null cn = st2
@@ -232,7 +234,7 @@ showstats (SST name cnt (ST parts))
               n' = length s
 
         expR n s
-            | n < n'	= s
+            | n < n'    = s
             | otherwise = take n $ s ++ replicate n ' '
             where
               n' = length s
