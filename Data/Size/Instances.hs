@@ -4,14 +4,15 @@
 module Data.Size.Instances
 where
 
-import qualified Data.List      as L
+import qualified Data.List            as L
 import           Data.Monoid
 import           Data.Size.Base
 
-import qualified Data.ByteString as BS
-import qualified Data.IntMap     as IM
-import qualified Data.IntSet     as IS
-import qualified Data.Map        as M
+import qualified Data.ByteString      as BS
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.IntMap          as IM
+import qualified Data.IntSet          as IS
+import qualified Data.Map             as M
 
 -- ----------------------------------------
 
@@ -206,11 +207,33 @@ instance (Sizeable k, Sizeable v) => Sizeable (M.Map k v) where
 
 -- --------------------
 
+{-
+data BS.ByteString = PS {-# UNPACK #-} !(ForeignPtr Word8) -- payload
+                        {-# UNPACK #-} !Int                -- offset
+                        {-# UNPACK #-} !Int                -- length
+-}
+
 instance Sizeable BS.ByteString where
-    sizeof s
-        = mksize (3 + (BS.length s + bytesPerWord -1) `div` bytesPerWord)
+    sizeof
+        = mksize . (3 +) . bytesToWords . BS.length
 
     statsof s
-        = mkstats s "" (3 + (BS.length s + bytesPerWord -1) `div` bytesPerWord)
+        = mkstats s "" (dataSize . sizeof $ s)
+
+-- --------------------
+
+{-
+  data BL.ByteString = Empty
+                     | Chunk {-# UNPACK #-} ! BS.ByteString ByteString
+-}
+
+instance Sizeable BL.ByteString where
+    sizeof
+        = mconcat . L.map sizeof' . BL.toChunks
+          where
+            sizeof' c = mksize (3 + 1 + bytesToWords (BS.length c))
+
+    statsof s
+        = mkstats s "" (dataSize . sizeof $ s)
 
 -- ------------------------------------------------------------

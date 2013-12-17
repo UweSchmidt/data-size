@@ -27,6 +27,9 @@ bitsPerWord = cnt 1 $ iterate (*2) (1::Int)
           | x < 0 = i
           | otherwise = cnt (i+1) xs
 
+bytesToWords :: Int -> Int
+bytesToWords i = (i + bytesPerWord - 1) `div` bytesPerWord
+
 -- --------------------
 
 -- | Counter for # of objects and # of words
@@ -39,10 +42,19 @@ data Size
     deriving (Eq, Show)
 
 -- | Make a counter for one object with n fields
+--
+-- constructors count 1 word
+-- If # words for the data is 0, it's a singleton,
+-- so the # of objects are not accumulated
 
 mksize :: Int -> Size
 mksize 0 = singletonSize
-mksize n = Size 1 (n + 1)
+mksize n = Size 1 (n + 1)		-- one word for constructor
+
+-- get the # of words for the data fields of a value
+
+dataSize :: Size -> Int
+dataSize (Size _o w) = (w - 1) `max` 0	-- decrement constructor size
 
 -- | The size value of a singleton
 --
@@ -53,11 +65,13 @@ singletonSize = Size 1 0
 
 instance Monoid Size where
     mempty
-        = Size 0 0
+        = singletonSize		-- Size 0 0
     mappend c1@(Size o1 w1) c2@(Size o2 w2)
         | c1 == singletonSize = c2	-- singletons don't accumulate
         | c2 == singletonSize = c1	--     "        "       "
         | otherwise           = Size (o1 + o2) (w1 + w2)
+    mconcat
+        = L.foldl' mappend mempty
 
 instance Scale Size where
     i .*. c@(Size o w)
@@ -74,6 +88,8 @@ instance Monoid SizeTable where
     mempty = ST M.empty
     mappend (ST t1) (ST t2)
         = ST $ M.unionWith (<>) t1 t2
+    mconcat
+        = L.foldl' mappend mempty
 
 instance Scale SizeTable where
     i .*. (ST t)
@@ -98,8 +114,10 @@ instance Monoid SizeStatistics where
         = SST n c t
           where
             n = if null n1 then n2 else n1
-            c = c1 <>        c2
+            c = c1 <> c2
             t = t1 <> t2
+    mconcat
+        = L.foldl' mappend mempty
 
 instance Scale  SizeStatistics where
     i .*. (SST n c t)
