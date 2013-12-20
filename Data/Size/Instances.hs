@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS -fno-warn-orphans #-}
 
 module Data.Size.Instances
@@ -13,104 +14,129 @@ import qualified Data.IntMap          as IM
 import qualified Data.IntSet          as IS
 import qualified Data.Map             as M
 
+import qualified Foreign.Storable     as FS
+
 -- ----------------------------------------
 
-instance Sizeable Bool   where
-instance Sizeable Int    where
-instance Sizeable Char   where
-instance Sizeable Double where
-    sizeof _  = mksize       (64 `div` bitsPerWord)
-    statsof x = mkstats x "" (64 `div` bitsPerWord)
+instance Sizeable Bool   where bytesOf = bytesOfStorable
+instance Sizeable Int    where bytesOf = bytesOfStorable
+instance Sizeable Char   where bytesOf = bytesOfStorable
+instance Sizeable Float  where bytesOf = bytesOfStorable
+instance Sizeable Double where bytesOf = bytesOfStorable
+
+bytesOfStorable :: FS.Storable a => a -> Bytes
+bytesOfStorable x = sizeOfObj $ mkBytes (FS.sizeOf x) (FS.alignment x)
 
 -- --------------------
 
 instance (Sizeable t1, Sizeable t2) => Sizeable (t1, t2) where
-    nameof (x1, x2)
+    nameOf (x1, x2)
            = concat ["("
-                    , nameof x1
+                    , nameOf x1
                     , ","
-                    , nameof x2
+                    , nameOf x2
                     , ")"
                     ]
-    sizeof (x1, x2)
-        = mksize 2
+    bytesOf (_x1, _x2)
+        = sizeOfObj $ sizeOfPtr <> sizeOfPtr
+
+    statsOf xs@(x1, x2)
+        = mkStats xs ""
           <>
-          sizeof x1 <> sizeof x2
-    statsof xs@(x1, x2)
-        = mkstats xs "" 2
-          <>
-          statsof x1 <> statsof x2
+          statsOf x1 <> statsOf x2
 
 -- --------------------
 
 instance (Sizeable t1, Sizeable t2, Sizeable t3) =>
          Sizeable (t1, t2, t3) where
-    nameof (x1, x2, x3)
+    nameOf (x1, x2, x3)
            = concat ["("
-                    , nameof x1
+                    , nameOf x1
                     , ","
-                    , nameof x2
+                    , nameOf x2
                     , ","
-                    , nameof x3
+                    , nameOf x3
                     , ")"
                     ]
-    sizeof (x1, x2, x3)
-        = mksize 3
+    bytesOf (_x1, _x2, _x3)
+        = sizeOfObj $ sizeOfPtr <> sizeOfPtr <> sizeOfPtr
+
+    statsOf xs@(x1, x2, x3)
+        = mkStats xs ""
           <>
-          sizeof x1 <> sizeof x2 <> sizeof x3
-    statsof xs@(x1, x2, x3)
-        = mkstats xs "" 3
-          <>
-          statsof x1 <> statsof x2 <> statsof x3
+          statsOf x1 <> statsOf x2 <> statsOf x3
 
 -- --------------------
 
 instance (Sizeable t1, Sizeable t2, Sizeable t3, Sizeable t4) =>
          Sizeable (t1, t2, t3, t4) where
-    nameof (x1, x2, x3, x4)
+    nameOf (x1, x2, x3, x4)
            = concat ["("
-                    , nameof x1
+                    , nameOf x1
                     , ","
-                    , nameof x2
+                    , nameOf x2
                     , ","
-                    , nameof x3
+                    , nameOf x3
                     , ","
-                    , nameof x4
+                    , nameOf x4
                     , ")"
                     ]
-    sizeof (x1, x2, x3, x4)
-        = mksize 4
+    bytesOf (_x1, _x2, _x3, _x4)
+        = sizeOfObj $ sizeOfPtr <> sizeOfPtr <> sizeOfPtr <> sizeOfPtr
+
+    statsOf xs@(x1, x2, x3, x4)
+        = mkStats xs ""
           <>
-          sizeof x1 <> sizeof x2 <> sizeof x3 <> sizeof x4
-    statsof xs@(x1, x2, x3, x4)
-        = mkstats xs "" 4
-          <>
-          statsof x1 <> statsof x2 <> statsof x3 <> statsof x4
+          statsOf x1 <> statsOf x2 <> statsOf x3 <> statsOf x4
 
 -- --------------------
 
-instance Sizeable a => Sizeable [a] where
-    nameof xs
-        = listTypeName (nameof (head xs))
-    sizeof
-        = mconcat . L.map sizeof
-    statsof xs
-        | null xs
-            = mkstats xs "[]" 0
+instance (Sizeable t) => Sizeable (Maybe t) where
+    nameOf x
+        = unwords ["Maybe", nameOf x1]
+          where
+            Just x1 = case x of
+                        Just _  -> x
+                        Nothing -> Just undefined
 
-        | nameof hd `elem` ["Char", "Int", "Double", "Float", "Bool"]
-            = mkstats xs "[]" 0
+    bytesOf x
+        = case x of
+            Just _  -> sizeOfObj $ sizeOfPtr
+            Nothing -> sizeOfSingleton
+                       
+    statsOf x
+        = case x of
+            Just x1 -> mkStats x "Just"    <> statsOf x1
+            Nothing -> mkStats x "Nothing"
+                       
+-- --------------------
+{-
+instance Sizeable a => Sizeable [a] where
+    nameOf xs
+        = listTypeName (nameOf (head xs))
+    bytesOf []
+            = sizeOfSingleton
+    bytesOf (x : xs)
+            = sizeOfObj $ sizeOfPtr <> sizeOfPtr
+    objectsOf
+        = mconcat . L.map objectsOf
+    statsOf xs
+        | null xs
+            = mkStats xs "[]"
+
+        | nameOf hd `elem` ["Char", "Int", "Double", "Float", "Bool"]
+            = mkStats xs "[]" 0
               <>
-              len .*. mkstats xs "(:)" 2
+              len .*. mkStats xs "(:)" 2
               <>
-              len .*. statsof hd
+              len .*. statsOf hd
 
         | otherwise
-            = mkstats xs "[]" 0
+            = mkStats xs "[]" 0
               <>
-              len .*. mkstats xs "(:)" 2
+              len .*. mkStats xs "(:)" 2
               <>
-              (mconcat . L.map statsof $ xs)
+              (mconcat . L.map statsOf $ xs)
         where
           hd  = head xs
           len = length xs
@@ -119,11 +145,11 @@ listTypeName :: String -> String
 listTypeName n
     | n == "Char" = "String"
     | otherwise   = "[" ++ n ++ "]"
-
+-- -}
 -- --------------------
-
+{-
 instance Sizeable IS.IntSet where
-    sizeof s
+    objectsOf s
         | IS.null s
             = mksize 0
         | otherwise
@@ -133,13 +159,13 @@ instance Sizeable IS.IntSet where
         where
           len = countTips s
 
-    statsof s
+    statsOf s
         | IS.null s
-            = mkstats s "Nil" 0
+            = mkStats s "Nil" 0
         | otherwise
-            = len .*. mkstats s "Tip" 2
+            = len .*. mkStats s "Tip" 2
               <>
-              (len - 1) .*. mkstats s "Bin" 4
+              (len - 1) .*. mkStats s "Bin" 4
         where
           len = countTips s
 
@@ -157,7 +183,7 @@ countTips = cnt 0 . IS.elems
 -- --------------------
 
 instance Sizeable v => Sizeable (IM.IntMap v) where
-    sizeof m
+    objectsOf m
         | IM.null m
             = mksize 0
         | otherwise
@@ -167,40 +193,40 @@ instance Sizeable v => Sizeable (IM.IntMap v) where
         where
           len = IM.size m
 
-    statsof m
+    statsOf m
         | IM.null m
-            = mkstats m "Nil" 0
+            = mkStats m "Nil" 0
         | otherwise
-            = len .*. mkstats m "Tip" 2
+            = len .*. mkStats m "Tip" 2
               <>
-              (len - 1) .*. mkstats m "Bin" 4
+              (len - 1) .*. mkStats m "Bin" 4
               <>
-              IM.foldr' ((<>) . statsof) mempty m
+              IM.foldr' ((<>) . statsOf) mempty m
         where
           len = IM.size m
 
 -- --------------------
 
 instance (Sizeable k, Sizeable v) => Sizeable (M.Map k v) where
-    sizeof m
+    objectsOf m
         | M.null m
             = mksize 0
         | otherwise
             = len .*. mksize 5
               <>
-              M.foldWithKey (\ k v st -> sizeof k <> sizeof v <> st) mempty m
+              M.foldWithKey (\ k v st -> objectsOf k <> objectsOf v <> st) mempty m
         where
           len   = M.size m
 
-    statsof m
+    statsOf m
         | M.null m
-            = mkstats m "Tip" 0
+            = mkStats m "Tip" 0
         | otherwise
-            = (len + 1) .*. mkstats m "Tip" 0
+            = (len + 1) .*. mkStats m "Tip" 0
               <>
-              len .*. mkstats m "Bin" 5
+              len .*. mkStats m "Bin" 5
               <>
-              M.foldWithKey (\ k v st -> statsof k <> statsof v <> st) mempty m
+              M.foldWithKey (\ k v st -> statsOf k <> statsOf v <> st) mempty m
         where
           len = M.size m
 
@@ -213,11 +239,11 @@ data BS.ByteString = PS {-# UNPACK #-} !(ForeignPtr Word8) -- payload
 -}
 
 instance Sizeable BS.ByteString where
-    sizeof
+    objectsOf
         = mksize . (3 +) . bytesToWords . BS.length
 
-    statsof s
-        = mkstats s "" (dataSize . sizeof $ s)
+    statsOf s
+        = mkStats s "" (dataSize . objectsOf $ s)
 
 -- --------------------
 
@@ -227,12 +253,13 @@ instance Sizeable BS.ByteString where
 -}
 
 instance Sizeable BL.ByteString where
-    sizeof
-        = mconcat . L.map sizeof' . BL.toChunks
+    objectsOf
+        = mconcat . L.map objectsOf' . BL.toChunks
           where
-            sizeof' c = mksize (3 + 1 + bytesToWords (BS.length c))
+            objectsOf' c = mksize (3 + 1 + bytesToWords (BS.length c))
 
-    statsof s
-        = mkstats s "" (dataSize . sizeof $ s)
+    statsOf s
+        = mkStats s "" (dataSize . objectsOf $ s)
 
 -- ------------------------------------------------------------
+-- -}

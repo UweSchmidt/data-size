@@ -1,24 +1,32 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Data.Size.Base
-    ( Size
+    ( Bytes
+    , Size
     , SizeTable
     , SizeStatistics
     , Sizeable(..)
 
     , bitsPerWord
     , bytesPerWord
+    , bytesPerChar
     , bytesToWords
-    , mksize
+    , mkBytes
+    , mkSize
     , dataSize
     , singletonSize
+    , sizeOfObj
+    , sizeOfConstr
+    , sizeOfPtr
+    , sizeOfSingleton
 
     , (.*.)
     , setName
     , addSize
     , addPart
-    , mkstats
-    , showstats
+    , mkObject
+    , mkStats
+    , showStats
 
     , mempty            -- re-export of Monoid
     , mappend
@@ -27,10 +35,11 @@ module Data.Size.Base
     )
 where
 
-import qualified Data.List       as L
-import qualified Data.Map.Strict as M
+import qualified Data.List        as L
+import qualified Data.Map.Strict  as M
 import           Data.Monoid
 import           Data.Typeable
+import qualified Foreign.Storable as FS
 
 -- ----------------------------------------
 
@@ -40,6 +49,9 @@ infix  7 .*.
 
 bytesPerWord :: Int
 bytesPerWord = bitsPerWord `div` 8
+
+bytesPerChar :: Int
+bytesPerChar = FS.sizeOf ' '
 
 bitsPerWord :: Int
 bitsPerWord = cnt 1 $ iterate (*2) (1::Int)
@@ -55,12 +67,53 @@ bytesToWords i = (i + bytesPerWord - 1) `div` bytesPerWord
 
 -- --------------------
 
+data Bytes
+    = Bytes
+      { _bytes :: ! Int
+      , _align :: ! Int
+      }
+    deriving (Eq, Show)
+
+instance Monoid Bytes where
+    mempty
+        = Bytes 0 1
+    (Bytes bs1 al1) `mappend` (Bytes bs2 al2)
+        = Bytes (aligned bs1 al2 + bs2) (al1 `max` al2)
+          where
+            aligned x a
+                = (x + (a - 1)) `div` a * a
+
+mkBytes :: Int -> Int -> Bytes
+mkBytes = Bytes
+
+wordAlign :: Bytes -> Bytes
+wordAlign x
+    = x <> Bytes 0 bytesPerWord
+
+sizeOfSingleton :: Bytes
+sizeOfSingleton
+    = Bytes 0 bytesPerWord
+
+sizeOfConstr :: Bytes
+sizeOfConstr
+    = Bytes bytesPerWord bytesPerWord
+
+sizeOfPtr :: Bytes
+sizeOfPtr
+    = Bytes bytesPerWord bytesPerWord
+
+sizeOfObj :: Bytes -> Bytes
+sizeOfObj w
+    = wordAlign $ sizeOfConstr <> w
+
+-- --------------------
+
 -- | Counter for # of objects and # of words
 
 data Size
     = Size
       { _objCnt  :: ! Int
-      , _wordCnt :: ! Int
+      , _byteCnt :: ! Int
       }
     deriving (Eq, Show)
 
@@ -70,14 +123,15 @@ data Size
 -- If # words for the data is 0, it's a singleton,
 -- so the # of objects are not accumulated
 
-mksize :: Int -> Size
-mksize 0 = singletonSize
-mksize n = Size 1 (n + 1)               -- one word for constructor
+mkSize :: Bytes -> Size
+mkSize (Bytes n _)
+    | n == 0    = singletonSize
+    | otherwise = Size 1 n
 
--- get the # of words for the data fields of a value
+-- get the # of bytes for the data fields of a value, without counting the constructor field
 
 dataSize :: Size -> Int
-dataSize (Size _o w) = (w - 1) `max` 0  -- decrement constructor size
+dataSize (Size _o w) = (w - bytesPerWord) `max` 0  -- decrement constructor size
 
 -- | The size value of a singleton
 --
@@ -123,13 +177,13 @@ instance Scale SizeTable where
 
 data SizeStatistics
     = SST
-      { _nameof :: ! String
-      , _accu   :: ! Size
-      , _parts  :: ! SizeTable
+      { _nameof :: String
+      , _accu   :: Size
+      , _parts  :: SizeTable
       }
 
 instance Show SizeStatistics where
-    show = showstats
+    show = showStats
 
 instance Monoid SizeStatistics where
     mempty = SST "" mempty mempty
@@ -153,12 +207,13 @@ class Monoid a => Scale a where
 
 -- --------------------
 
-class Typeable a => Sizeable a where
-    nameof    :: a -> String
-    sizeof    :: a -> Size
-    statsof   :: a -> SizeStatistics
+class (Typeable a) => Sizeable a where
+    nameOf    :: a -> String
+    bytesOf   :: a -> Bytes
+    objectsOf :: a -> Size
+    statsOf   :: a -> SizeStatistics
 
-    nameof x
+    nameOf x
         | m == "GHC.Types" = n
         | otherwise        = m ++ "." ++ n
         where
@@ -166,8 +221,8 @@ class Typeable a => Sizeable a where
           m = tyConModule t
           n = tyConName t
 
-    sizeof _  = mksize       1  -- defaults for primitive types
-    statsof x = mkstats x "" 1  --     "     "      "       "
+    objectsOf   = _accu . statsOf
+    statsOf   x = mkStats x ""
 
 -- ------------------------------------------------------------
 
@@ -188,19 +243,26 @@ addPart :: String -> Size ->  SizeStatistics -> SizeStatistics
 addPart n c st
     = st { _parts = insertSizeTable n c $ _parts st }
 
-mkstats :: Sizeable a => a -> String -> Int -> SizeStatistics
-mkstats x cn w
+mkObject :: Sizeable a => a -> Size
+mkObject x
+    | n == 0    = singletonSize
+    | otherwise = Size 1 n
+    where
+      (Bytes n _) = bytesOf x
+
+mkStats :: (Sizeable a) => a -> String -> SizeStatistics
+mkStats x cn
     = st3
     where
-      n = nameof x
-      cnt = Size 1 (if w == 0 then 0 else w + 1)        -- overhead for tagfield
-      st1 = addSize cnt $ setName n $ mempty
-      st2 = addPart n cnt st1
+      nm  = nameOf x
+      cnt = mkObject x
+      st1 = addSize cnt $ setName nm $ mempty
+      st2 = addPart nm cnt st1
       st3 | null cn = st2
-          | otherwise = addPart (n ++ " " ++ cn) cnt st2
+          | otherwise = addPart (nm ++ " " ++ cn) cnt st2
 
-showstats :: SizeStatistics -> String
-showstats (SST name cnt (ST parts))
+showStats :: SizeStatistics -> String
+showStats (SST name cnt (ST parts))
     = unlines $
       header
       ++ "total value:"
