@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# OPTIONS -fno-warn-orphans #-}
+-- {-# LANGUAGE FlexibleInstances #-}
+{-# OPTIONS -fno-warn-orphans  #-}
 
 module Data.Size.Instances
 where
@@ -18,30 +18,44 @@ import qualified Foreign.Storable     as FS
 
 -- ----------------------------------------
 
-instance Sizeable Bool   where bytesOf = bytesOfStorable
-instance Sizeable Int    where bytesOf = bytesOfStorable
-instance Sizeable Char   where bytesOf = bytesOfStorable
-instance Sizeable Float  where bytesOf = bytesOfStorable
-instance Sizeable Double where bytesOf = bytesOfStorable
+instance Sizeable Bool   where dataOf = dataOfStorable
+instance Sizeable Int    where dataOf = dataOfStorable
+instance Sizeable Char   where dataOf = dataOfStorable
+instance Sizeable Float  where dataOf = dataOfStorable
+instance Sizeable Double where dataOf = dataOfStorable
 
-bytesOfStorable :: FS.Storable a => a -> Bytes
-bytesOfStorable x = sizeOfObj $ mkBytes (FS.sizeOf x) (FS.alignment x)
+dataOfStorable :: FS.Storable a => a -> Bytes
+dataOfStorable x
+    = mkBytes (FS.sizeOf x) (FS.alignment x)
+
+dataOfBool :: Bytes
+dataOfBool
+    = dataOfStorable (undefined :: Bool)
+
+dataOfInt :: Bytes
+dataOfInt
+    = dataOfStorable (undefined :: Int)
+
+dataOfChar :: Bytes
+dataOfChar
+    = dataOfStorable (undefined :: Char)
+
+dataOfFloat :: Bytes
+dataOfFloat
+    = dataOfStorable (undefined :: Float)
+
+dataOfDouble :: Bytes
+dataOfDouble
+    = dataOfStorable (undefined :: Double)
 
 -- --------------------
 
 instance (Sizeable t1, Sizeable t2) => Sizeable (t1, t2) where
-    nameOf (x1, x2)
-           = concat ["("
-                    , nameOf x1
-                    , ","
-                    , nameOf x2
-                    , ")"
-                    ]
-    bytesOf (_x1, _x2)
-        = sizeOfObj $ sizeOfPtr <> sizeOfPtr
+    dataOf (_x1, _x2)
+        = 2 .*. dataOfPtr
 
     statsOf xs@(x1, x2)
-        = mkStats xs ""
+        = mkStats xs
           <>
           statsOf x1 <> statsOf x2
 
@@ -49,20 +63,11 @@ instance (Sizeable t1, Sizeable t2) => Sizeable (t1, t2) where
 
 instance (Sizeable t1, Sizeable t2, Sizeable t3) =>
          Sizeable (t1, t2, t3) where
-    nameOf (x1, x2, x3)
-           = concat ["("
-                    , nameOf x1
-                    , ","
-                    , nameOf x2
-                    , ","
-                    , nameOf x3
-                    , ")"
-                    ]
-    bytesOf (_x1, _x2, _x3)
-        = sizeOfObj $ sizeOfPtr <> sizeOfPtr <> sizeOfPtr
+    dataOf (_x1, _x2, _x3)
+        = 3 .*. dataOfPtr
 
     statsOf xs@(x1, x2, x3)
-        = mkStats xs ""
+        = mkStats xs
           <>
           statsOf x1 <> statsOf x2 <> statsOf x3
 
@@ -70,165 +75,140 @@ instance (Sizeable t1, Sizeable t2, Sizeable t3) =>
 
 instance (Sizeable t1, Sizeable t2, Sizeable t3, Sizeable t4) =>
          Sizeable (t1, t2, t3, t4) where
-    nameOf (x1, x2, x3, x4)
-           = concat ["("
-                    , nameOf x1
-                    , ","
-                    , nameOf x2
-                    , ","
-                    , nameOf x3
-                    , ","
-                    , nameOf x4
-                    , ")"
-                    ]
-    bytesOf (_x1, _x2, _x3, _x4)
-        = sizeOfObj $ sizeOfPtr <> sizeOfPtr <> sizeOfPtr <> sizeOfPtr
+    dataOf (_x1, _x2, _x3, _x4)
+        = 4 .*. dataOfPtr
 
     statsOf xs@(x1, x2, x3, x4)
-        = mkStats xs ""
+        = mkStats xs
           <>
           statsOf x1 <> statsOf x2 <> statsOf x3 <> statsOf x4
 
 -- --------------------
 
 instance (Sizeable t) => Sizeable (Maybe t) where
-    nameOf x
-        = unwords ["Maybe", nameOf x1]
-          where
-            Just x1 = case x of
-                        Just _  -> x
-                        Nothing -> Just undefined
-
-    bytesOf x
+    dataOf x
         = case x of
-            Just _  -> sizeOfObj $ sizeOfPtr
-            Nothing -> sizeOfSingleton
-                       
+            Just _  -> dataOfPtr
+            Nothing -> dataOfSingleton
+
     statsOf x
         = case x of
-            Just x1 -> mkStats x "Just"    <> statsOf x1
-            Nothing -> mkStats x "Nothing"
-                       
+            Just x1 -> constrStats "Just"    x <> statsOf x1
+            Nothing -> constrStats "Nothing" x
+
 -- --------------------
-{-
+
+instance (Sizeable t1, Sizeable t2) => Sizeable (Either t1 t2) where
+    dataOf x
+        = case x of
+            Left  _ -> dataOfPtr
+            Right _ -> dataOfPtr
+
+    statsOf x
+        = case x of
+            Left  x1 -> constrStats "Left"  x <> statsOf x1
+            Right x1 -> constrStats "Right" x <> statsOf x1
+
+-- --------------------
+--
+-- in list statistics the constructors ([] and (:) are not counted
+-- just the # of lists and the total # of cells used for all the (:) nodes
+
 instance Sizeable a => Sizeable [a] where
-    nameOf xs
-        = listTypeName (nameOf (head xs))
-    bytesOf []
-            = sizeOfSingleton
-    bytesOf (x : xs)
-            = sizeOfObj $ sizeOfPtr <> sizeOfPtr
-    objectsOf
-        = mconcat . L.map objectsOf
+    dataOf xs
+        = length xs .*. (dataOfConstr <> (2 .*. dataOfPtr))
+
+    bytesOf             -- Lists are handled as a single object,
+        = dataOf        -- all space is already accumulated in dataOf
+
     statsOf xs
         | null xs
-            = mkStats xs "[]"
+            = mkStats xs
 
         | nameOf hd `elem` ["Char", "Int", "Double", "Float", "Bool"]
-            = mkStats xs "[]" 0
-              <>
-              len .*. mkStats xs "(:)" 2
+            = mkStats xs
               <>
               len .*. statsOf hd
 
         | otherwise
-            = mkStats xs "[]" 0
-              <>
-              len .*. mkStats xs "(:)" 2
+            = mkStats xs
               <>
               (mconcat . L.map statsOf $ xs)
         where
           hd  = head xs
           len = length xs
 
-listTypeName :: String -> String
-listTypeName n
-    | n == "Char" = "String"
-    | otherwise   = "[" ++ n ++ "]"
--- -}
 -- --------------------
-{-
+
 instance Sizeable IS.IntSet where
-    objectsOf s
+    dataOf s
         | IS.null s
-            = mksize 0
+            = dataOfSingleton
         | otherwise
-            = len .*. mksize 2
+            = len .*. (dataOfObj $ dataOfInt <> dataOfInt)
               <>
-              (len - 1) .*. mksize 4
+              (len - 1) .*. (dataOfObj $ dataOfInt <> dataOfInt <> dataOfPtr <> dataOfPtr)
         where
           len = countTips s
 
-    statsOf s
-        | IS.null s
-            = mkStats s "Nil" 0
-        | otherwise
-            = len .*. mkStats s "Tip" 2
-              <>
-              (len - 1) .*. mkStats s "Bin" 4
-        where
-          len = countTips s
+          countTips :: IS.IntSet -> Int
+          countTips = cnt 0 . IS.elems
+              where
+                cnt !i []
+                    = i
+                cnt !i xs@(x : _)
+                    = cnt (i + 1) $
+                      dropWhile (\ y -> y `div` bitsPerWord == x `div` bitsPerWord) xs
 
--- hack: Data.IntSet.Base is hidden, so we have to look into the source
--- and compute the size by hand
+    bytesOf             -- IntSet is handled as a single object,
+        = dataOf        -- all space is already accumulated in dataOf
 
-countTips :: IS.IntSet -> Int
-countTips = cnt 0 . IS.elems
-    where
-      cnt !i []
-          = i
-      cnt !i xs@(x : _)
-          = cnt (i + 1) $ dropWhile (\ y -> y `div` bitsPerWord == x `div` bitsPerWord) xs
+    statsOf
+        = mkStats
 
 -- --------------------
 
 instance Sizeable v => Sizeable (IM.IntMap v) where
-    objectsOf m
+    dataOf m
         | IM.null m
-            = mksize 0
+            = dataOfSingleton
         | otherwise
-            = len .*. mksize 2
+            = len .*. (dataOfObj $ dataOfInt <> dataOfPtr)
               <>
-              (len - 1) .*. mksize 4
+              (len - 1) .*. (dataOfObj $ dataOfInt <> dataOfInt <> dataOfPtr <> dataOfPtr)
         where
           len = IM.size m
 
+    bytesOf             -- IntMap is handled as a single object,
+        = dataOf        -- all space is already accumulated in dataOf
+
     statsOf m
-        | IM.null m
-            = mkStats m "Nil" 0
-        | otherwise
-            = len .*. mkStats m "Tip" 2
-              <>
-              (len - 1) .*. mkStats m "Bin" 4
-              <>
-              IM.foldr' ((<>) . statsOf) mempty m
-        where
-          len = IM.size m
+        = mkStats m
+          <>
+          IM.foldr' ((<>) . statsOf) mempty m
 
 -- --------------------
 
 instance (Sizeable k, Sizeable v) => Sizeable (M.Map k v) where
-    objectsOf m
+    dataOf m
         | M.null m
-            = mksize 0
+            = dataOfSingleton
         | otherwise
-            = len .*. mksize 5
-              <>
-              M.foldWithKey (\ k v st -> objectsOf k <> objectsOf v <> st) mempty m
+            = len .*. (dataOfObj $ dataOfInt <> 4 .*. dataOfPtr)
         where
           len   = M.size m
 
+    bytesOf             -- Map is handled as a single object,
+        = dataOf        -- all space is already accumulated in dataOf
+
     statsOf m
-        | M.null m
-            = mkStats m "Tip" 0
-        | otherwise
-            = (len + 1) .*. mkStats m "Tip" 0
-              <>
-              len .*. mkStats m "Bin" 5
-              <>
-              M.foldWithKey (\ k v st -> statsOf k <> statsOf v <> st) mempty m
+        = mkStats m
+          <>
+          (mconcat . L.map (uncurry statsOfPair) $ M.toList m)
         where
-          len = M.size m
+          statsOfPair k v
+              = statsOf k <> statsOf v
+
 
 -- --------------------
 
@@ -236,14 +216,24 @@ instance (Sizeable k, Sizeable v) => Sizeable (M.Map k v) where
 data BS.ByteString = PS {-# UNPACK #-} !(ForeignPtr Word8) -- payload
                         {-# UNPACK #-} !Int                -- offset
                         {-# UNPACK #-} !Int                -- length
+data ForeignPtr a = ForeignPtr Addr# ForeignPtrContents
+
+data ForeignPtrContents
+  = PlainForeignPtr !(IORef (Finalizers, [IO ()]))
+  | MallocPtr        (MutableByteArray# RealWorld) !(IORef (Finalizers, [IO ()]))
+  | PlainPtr         (MutableByteArray# RealWorld)
 -}
 
 instance Sizeable BS.ByteString where
-    objectsOf
-        = mksize . (3 +) . bytesToWords . BS.length
+    dataOf bs
+        = (dataOfPtr <> 2 .*. dataOfInt)                -- size of ByteString data
+          <> (dataOfObj $ dataOfPtr <> dataOfPtr)       -- size of ForeignPtr object
+          <> (wordAlign $                               -- size of byte sequence
+              BS.length bs .*. dataOfChar
+             )
 
     statsOf s
-        = mkStats s "" (dataSize . objectsOf $ s)
+        = mkStats s
 
 -- --------------------
 
@@ -253,13 +243,20 @@ instance Sizeable BS.ByteString where
 -}
 
 instance Sizeable BL.ByteString where
-    objectsOf
-        = mconcat . L.map objectsOf' . BL.toChunks
-          where
-            objectsOf' c = mksize (3 + 1 + bytesToWords (BS.length c))
+    nameOf
+        = (++ " (lazy)") . typeName
 
-    statsOf s
-        = mkStats s "" (dataSize . objectsOf $ s)
+    dataOf bs
+        = length cs .*. (dataOfObj $ dataOfPtr <> dataOfPtr)
+          <>
+          (mconcat . L.map bytesOf $ cs)
+        where
+          cs = BL.toChunks bs
+
+    bytesOf             -- ByteString is handled as a single object,
+        = dataOf        -- all space is already accumulated in dataOf
+
+    statsOf
+        = mkStats
 
 -- ------------------------------------------------------------
--- -}

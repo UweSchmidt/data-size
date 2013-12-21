@@ -11,21 +11,24 @@ module Data.Size.Base
     , bytesPerWord
     , bytesPerChar
     , bytesToWords
+    , wordAlign
     , mkBytes
     , mkSize
     , dataSize
     , singletonSize
-    , sizeOfObj
-    , sizeOfConstr
-    , sizeOfPtr
-    , sizeOfSingleton
+    , dataOfObj
+    , dataOfConstr
+    , dataOfPtr
+    , dataOfSingleton
 
     , (.*.)
+    , typeName
     , setName
     , addSize
     , addPart
     , mkObject
     , mkStats
+    , constrStats
     , showStats
 
     , mempty            -- re-export of Monoid
@@ -78,33 +81,43 @@ instance Monoid Bytes where
     mempty
         = Bytes 0 1
     (Bytes bs1 al1) `mappend` (Bytes bs2 al2)
-        = Bytes (aligned bs1 al2 + bs2) (al1 `max` al2)
-          where
-            aligned x a
-                = (x + (a - 1)) `div` a * a
+        = Bytes (align bs1 al2 + bs2) (al1 `max` al2)
+
+instance Scale Bytes where
+    i .*. (Bytes bs al)
+        = Bytes (i * bs) al
+
+align :: Int -> Int -> Int
+align x a
+    = (x + (a - 1)) `div` a * a
 
 mkBytes :: Int -> Int -> Bytes
-mkBytes = Bytes
+mkBytes bs' al'
+    = Bytes (align bs al) al
+      where
+        bs = bs' `max` 0
+        al = al' `max` 1
 
 wordAlign :: Bytes -> Bytes
 wordAlign x
     = x <> Bytes 0 bytesPerWord
 
-sizeOfSingleton :: Bytes
-sizeOfSingleton
+dataOfSingleton :: Bytes
+dataOfSingleton
     = Bytes 0 bytesPerWord
 
-sizeOfConstr :: Bytes
-sizeOfConstr
+dataOfConstr :: Bytes
+dataOfConstr
     = Bytes bytesPerWord bytesPerWord
 
-sizeOfPtr :: Bytes
-sizeOfPtr
+dataOfPtr :: Bytes
+dataOfPtr
     = Bytes bytesPerWord bytesPerWord
 
-sizeOfObj :: Bytes -> Bytes
-sizeOfObj w
-    = wordAlign $ sizeOfConstr <> w
+dataOfObj :: Bytes -> Bytes
+dataOfObj w@(Bytes bs _al)
+    | bs == 0     = w                           -- singleton
+    | otherwise   = wordAlign $ dataOfConstr <> w
 
 -- --------------------
 
@@ -181,9 +194,9 @@ data SizeStatistics
       , _accu   :: Size
       , _parts  :: SizeTable
       }
+--    deriving Show
 
-instance Show SizeStatistics where
-    show = showStats
+instance Show SizeStatistics where show = showStats
 
 instance Monoid SizeStatistics where
     mempty = SST "" mempty mempty
@@ -209,20 +222,20 @@ class Monoid a => Scale a where
 
 class (Typeable a) => Sizeable a where
     nameOf    :: a -> String
+    dataOf    :: a -> Bytes
     bytesOf   :: a -> Bytes
     objectsOf :: a -> Size
     statsOf   :: a -> SizeStatistics
 
-    nameOf x
-        | m == "GHC.Types" = n
-        | otherwise        = m ++ "." ++ n
-        where
-          t = fst . splitTyConApp . typeOf $ x
-          m = tyConModule t
-          n = tyConName t
-
+    nameOf      = typeName
+    bytesOf     = dataOfObj . dataOf
     objectsOf   = _accu . statsOf
-    statsOf   x = mkStats x ""
+    statsOf     = mkStats
+
+
+typeName :: Typeable a => a -> String
+typeName
+    = show . typeOf
 
 -- ------------------------------------------------------------
 
@@ -243,6 +256,13 @@ addPart :: String -> Size ->  SizeStatistics -> SizeStatistics
 addPart n c st
     = st { _parts = insertSizeTable n c $ _parts st }
 
+mkFields :: Sizeable a => a -> Size
+mkFields x
+    | n == 0    = singletonSize
+    | otherwise = Size 1 n
+    where
+      (Bytes n _) = wordAlign $ dataOf x
+
 mkObject :: Sizeable a => a -> Size
 mkObject x
     | n == 0    = singletonSize
@@ -250,8 +270,11 @@ mkObject x
     where
       (Bytes n _) = bytesOf x
 
-mkStats :: (Sizeable a) => a -> String -> SizeStatistics
-mkStats x cn
+mkStats :: (Sizeable a) => a -> SizeStatistics
+mkStats = constrStats ""
+
+constrStats :: (Sizeable a) => String -> a -> SizeStatistics
+constrStats cn x
     = st3
     where
       nm  = nameOf x
@@ -259,7 +282,7 @@ mkStats x cn
       st1 = addSize cnt $ setName nm $ mempty
       st2 = addPart nm cnt st1
       st3 | null cn = st2
-          | otherwise = addPart (nm ++ " " ++ cn) cnt st2
+          | otherwise = addPart (nm ++ "\t" ++ cn) cnt st2
 
 showStats :: SizeStatistics -> String
 showStats (SST name cnt (ST parts))
@@ -291,13 +314,13 @@ showStats (SST name cnt (ST parts))
         toLine n (Size o w)
             = unwords [ indentConstr widthName   n
                       , expL         widthObj  $ show o
-                      , expL         widthWord $ show w
+                      , expL         widthWord $ show (w `div` bytesPerWord)
                       ]
         indentConstr i n
-            | length ws == 2 = replicate 8 ' ' ++ expR i (concat . drop 1 $ ws)
-            | otherwise    =                      expR i n
+            | not (null c') = replicate 8 ' ' ++ expR i (drop 1 c')
+            | otherwise      =                   expR i n
             where
-              ws = words n
+              (_n', c') = L.break (== '\t') n
 
         expL n s
             | n < n'    = s
