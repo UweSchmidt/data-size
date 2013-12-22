@@ -9,10 +9,11 @@ import           Data.Size.Base
 
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as BL
+import           Data.Int
 import qualified Data.IntMap          as IM
 import qualified Data.IntSet          as IS
 import qualified Data.Map             as M
-
+import           Data.Word
 import qualified Foreign.Storable     as FS
 
 -- ----------------------------------------
@@ -22,6 +23,16 @@ instance Sizeable Int    where dataOf = dataOfStorable
 instance Sizeable Char   where dataOf = dataOfStorable
 instance Sizeable Float  where dataOf = dataOfStorable
 instance Sizeable Double where dataOf = dataOfStorable
+
+instance Sizeable Word8  where dataOf = dataOfStorable
+instance Sizeable Word16 where dataOf = dataOfStorable
+instance Sizeable Word32 where dataOf = dataOfStorable
+instance Sizeable Word64 where dataOf = dataOfStorable
+
+instance Sizeable Int8   where dataOf = dataOfStorable
+instance Sizeable Int16  where dataOf = dataOfStorable
+instance Sizeable Int32  where dataOf = dataOfStorable
+instance Sizeable Int64  where dataOf = dataOfStorable
 
 dataOfStorable :: FS.Storable a => a -> Bytes
 dataOfStorable x
