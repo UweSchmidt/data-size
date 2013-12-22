@@ -171,7 +171,7 @@ instance Scale Size where
 -- --------------------
 
 newtype SizeTable
-    = ST (M.Map String Size)
+    = ST (M.Map (String, String) Size)
       deriving (Show)
 
 instance Monoid SizeTable where
@@ -239,8 +239,8 @@ typeName
 
 -- ------------------------------------------------------------
 
-insertSizeTable :: String -> Size -> SizeTable -> SizeTable
-insertSizeTable k v (ST t) = ST $ M.insertWith (<>) k v t
+insertSizeTable :: (String, String) -> Size -> SizeTable -> SizeTable
+insertSizeTable tn v (ST t) = ST $ M.insertWith (<>) tn v t
 
 -- ------------------------------------------------------------
 
@@ -252,16 +252,9 @@ addSize :: Size -> SizeStatistics -> SizeStatistics
 addSize c st
     = st { _accu = c <> _accu st }
 
-addPart :: String -> Size ->  SizeStatistics -> SizeStatistics
-addPart n c st
-    = st { _parts = insertSizeTable n c $ _parts st }
-
-mkFields :: Sizeable a => a -> Size
-mkFields x
-    | n == 0    = singletonSize
-    | otherwise = Size 1 n
-    where
-      (Bytes n _) = wordAlign $ dataOf x
+addPart :: String -> String -> Size ->  SizeStatistics -> SizeStatistics
+addPart tn cn c st
+    = st { _parts = insertSizeTable (tn, cn) c $ _parts st }
 
 mkObject :: Sizeable a => a -> Size
 mkObject x
@@ -279,59 +272,107 @@ constrStats cn x
     where
       nm  = nameOf x
       cnt = mkObject x
-      st1 = addSize cnt $ setName nm $ mempty
-      st2 = addPart nm cnt st1
-      st3 | null cn = st2
-          | otherwise = addPart (nm ++ "\t" ++ cn) cnt st2
+      st1 = addSize cnt $ setName nm $ mempty   -- add the stats for the datatype
+      st2 = addPart nm "" cnt st1
+      st3 | null cn   =                   st2
+          | otherwise = addPart nm cn cnt st2   -- add the stats for the constructor
 
 showStats :: SizeStatistics -> String
-showStats (SST name cnt (ST parts))
+showStats (SST name (Size oc bc) (ST parts))
     = unlines $
       header
       ++ "total value:"
-      :   toLine name cnt
+      :   toLine' ( (charToString name, "")
+                  , (showNum oc, showNum . bytesToWords $ bc)
+                  )
       : ""
       : "components:"
-      :  (L.map (uncurry toLine) . M.toList $ parts)
+      :  toTable
       where
-        ! widthName = L.maximum . L.map length . ([col1, name] ++) . M.keys
-                      $ parts
-        ! widthObj  = 16 `max` length col2
-        ! widthWord = 16 `max` length col3
+        statsTable = L.map toString . M.toList $ parts
+
+        toString :: ((String, String), Size) -> ((String, String), (String, String))
+        toString ((tn, cn), Size os bs)
+            = ( ( if null cn
+                  then charToString tn
+                  else blankName
+                , cn
+                )
+              , ( showNum os
+                , showNum . bytesToWords $ bs
+                )
+              )
+        toTable
+            = L.map toLine' $ statsTable
+
+        toLine' :: ((String, String), (String, String)) -> String
+        toLine' ((tn, cn), (os, bs))
+            = unwords [ if null cn
+                        then expR widthCol1 tn
+                        else blankName ++ expR widthCol1 cn
+                      , expL widthCol2 os
+                      , expL widthCol3 bs
+                      ]
+
+        blankName   = replicate 8 ' '
+
+        widthCol1
+            = 16 `max` length col1 `max` (L.maximum . L.map (uncurry width . fst) $ statsTable)
+            where
+              width tn cn
+                  = length tn + length cn
+        widthCol2
+            = 16 `max` length col2 `max` (L.maximum . L.map (length . fst . snd) $ statsTable)
+
+        widthCol3
+            = 16 `max`length col3 `max` (L.maximum . L.map (length . snd . snd) $ statsTable)
+
+        charToString
+            = subst "[Char]" "String"
+
         col1 = "type/constructor"
         col2 = "# object"
         col3 = "# word" ++ show bitsPerWord
         header
             = [l1, l2, l3]
               where
-                l1 = unwords [ expR widthName col1
-                             , expL widthObj  col2
-                             , expL widthWord col3
+                l1 = unwords [ expR widthCol1 col1
+                             , expL widthCol2 col2
+                             , expL widthCol3 col3
                              ]
                 l2 = map (const '=') l1
                 l3 = ""
 
-        toLine n (Size o w)
-            = unwords [ indentConstr widthName   n
-                      , expL         widthObj  $ show o
-                      , expL         widthWord $ show (w `div` bytesPerWord)
-                      ]
-        indentConstr i n
-            | not (null c') = replicate 8 ' ' ++ expR i (drop 1 c')
-            | otherwise      =                   expR i n
-            where
-              (_n', c') = L.break (== '\t') n
+expL :: Int -> String -> String
+expL n s
+    | n < n'    = s
+    | otherwise = reverse . take n . reverse . (replicate n ' ' ++) $ s
+    where
+      n' = length s
 
-        expL n s
-            | n < n'    = s
-            | otherwise = reverse . take n . reverse . (replicate n ' ' ++) $ s
-            where
-              n' = length s
+expR :: Int -> String -> String
+expR n s
+    | n < n'    = s
+    | otherwise = take n $ s ++ replicate n ' '
+    where
+      n' = length s
 
-        expR n s
-            | n < n'    = s
-            | otherwise = take n $ s ++ replicate n ' '
-            where
-              n' = length s
+showNum :: Int -> String
+showNum
+    = reverse . insComma . reverse . show
+    where
+      insComma (x1 : x2 : x3 : xs4@(_ : _))
+          = x1 : x2 : x3 : ',' : insComma xs4
+      insComma xs
+          = xs
+
+subst :: String -> String -> String -> String
+subst _ _ []
+    = []
+subst xs ys inp
+    | L.isPrefixOf xs inp
+        = ys ++ subst xs ys (L.drop (length xs) inp)
+    | otherwise
+        = head inp : subst xs ys (tail inp)
 
 -- ------------------------------------------------------------

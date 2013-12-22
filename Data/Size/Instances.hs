@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns #-}
--- {-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS -fno-warn-orphans  #-}
 
 module Data.Size.Instances
