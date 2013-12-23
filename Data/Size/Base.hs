@@ -281,9 +281,9 @@ showStats :: SizeStatistics -> String
 showStats (SST name (Size oc bc) (ST parts))
     = unlines $
       header
-      ++ "total value:"
+      ++ "accumulated data:"
       :   toLine' ( (charToString name, "")
-                  , (showNum oc, showNum . bytesToWords $ bc)
+                  , (showNum oc, (showNum {- . bytesToWords -} $ bc, ""))
                   )
       : ""
       : "components:"
@@ -291,7 +291,7 @@ showStats (SST name (Size oc bc) (ST parts))
       where
         statsTable = L.map toString . M.toList $ parts
 
-        toString :: ((String, String), Size) -> ((String, String), (String, String))
+        toString :: ((String, String), Size) -> ((String, String), (String, (String, String)))
         toString ((tn, cn), Size os bs)
             = ( ( if null cn
                   then charToString tn
@@ -299,19 +299,22 @@ showStats (SST name (Size oc bc) (ST parts))
                 , cn
                 )
               , ( showNum os
-                , showNum . bytesToWords $ bs
+                , ( showNum {- . bytesToWords -} $ bs
+                  , showNum $ (bs + os - 1) `div` os
+                  )
                 )
               )
         toTable
             = L.map toLine' $ statsTable
 
-        toLine' :: ((String, String), (String, String)) -> String
-        toLine' ((tn, cn), (os, bs))
+        toLine' :: ((String, String), (String, (String, String))) -> String
+        toLine' ((tn, cn), (os, (bs, sz)))
             = unwords [ if null cn
                         then expR widthCol1 tn
                         else blankName ++ expR widthCol1 cn
                       , expL widthCol2 os
                       , expL widthCol3 bs
+                      , expL widthCol4 sz
                       ]
 
         blankName   = replicate 8 ' '
@@ -325,20 +328,25 @@ showStats (SST name (Size oc bc) (ST parts))
             = 16 `max` length col2 `max` (L.maximum . L.map (length . fst . snd) $ statsTable)
 
         widthCol3
-            = 16 `max`length col3 `max` (L.maximum . L.map (length . snd . snd) $ statsTable)
+            = 16 `max` length col3 `max` (L.maximum . L.map (length . fst . snd . snd) $ statsTable)
+
+        widthCol4
+            = 16 `max` length col4 `max` (L.maximum . L.map (length . snd . snd . snd) $ statsTable)
 
         charToString
             = subst "[Char]" "String"
 
         col1 = "type/constructor"
-        col2 = "# object"
-        col3 = "# word" ++ show bitsPerWord
+        col2 = "# objects"
+        col3 = "# bytes" -- "# word" ++ show bitsPerWord
+        col4 = "bytes/obj"
         header
             = [l1, l2, l3]
               where
                 l1 = unwords [ expR widthCol1 col1
                              , expL widthCol2 col2
                              , expL widthCol3 col3
+                             , expL widthCol4 col4
                              ]
                 l2 = map (const '=') l1
                 l3 = ""
