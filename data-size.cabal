@@ -1,5 +1,5 @@
 name:                data-size
-version:             0.1.1.4
+version:             0.1.1.5
 synopsis:            Profiling of data structures
 description:         Profiling of data structures
                      for counting the # of object allocated for a value

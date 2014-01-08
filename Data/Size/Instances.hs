@@ -9,6 +9,7 @@ import           Data.Size.Base
 
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as BL
+-- import qualified Data.ByteString.Short as SS -- requires bytestring-0.10.4
 import           Data.Int
 import qualified Data.IntMap          as IM
 import qualified Data.IntSet          as IS
@@ -223,6 +224,8 @@ instance (Sizeable k, Sizeable v) => Sizeable (M.Map k v) where
 -- --------------------
 
 {-
+The type definition from Data.ByteString:
+
 data BS.ByteString = PS {-# UNPACK #-} !(ForeignPtr Word8) -- payload
                         {-# UNPACK #-} !Int                -- offset
                         {-# UNPACK #-} !Int                -- length
@@ -232,18 +235,43 @@ data ForeignPtrContents
   = PlainForeignPtr !(IORef (Finalizers, [IO ()]))
   | MallocPtr        (MutableByteArray# RealWorld) !(IORef (Finalizers, [IO ()]))
   | PlainPtr         (MutableByteArray# RealWorld)
+
+In the documentation for short bytestrings
+"http://hackage.haskell.org/package/bytestring/docs/Data-ByteString-Short.html"
+space requirements are described:
+
+ByteString unshared: 9 words; 36 or 72 bytes + word aligned number of bytes
+
+ShortByteString: 4 words; 32 or 64 bytes + word aligned number of bytes
+
 -}
 
 instance Sizeable BS.ByteString where
     dataOf bs
-        = (dataOfPtr <> 2 .*. dataOfInt)                -- size of ByteString data
-          <> (dataOfObj $ dataOfPtr <> dataOfPtr)       -- size of ForeignPtr object
+        = dataOfObj $
+          (8 .*. dataOfPtr)                             -- 8 words for length field and pointers
           <> (wordAlign $                               -- size of byte sequence
-              BS.length bs .*. dataOfChar
+              BS.length bs .*. dataOf (undefined ::Word8)
              )
 
     statsOf s
         = mkStats s
+
+{- requires bytestring-0.10.4
+
+instance Sizeable SS.ShortByteString where
+    dataOf bs
+        = dataOfObj $ bytesOf bs
+
+    bytesOf bs
+        = (3 .*. dataOfPtr)                             -- 3 words for length field and pointers
+          <> (wordAlign $                               -- size of byte sequence
+              BS.length bs .*. dataOf (undefined ::Word8)
+             )
+
+    statsOf s
+        = mkStats s
+-}
 
 -- --------------------
 
