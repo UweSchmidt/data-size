@@ -7,15 +7,18 @@ where
 import qualified Data.List            as L
 import           Data.Size.Base
 
-import qualified Data.ByteString      as BS
-import qualified Data.ByteString.Lazy as BL
--- import qualified Data.ByteString.Short as SS -- requires bytestring-0.10.4
+import qualified Data.ByteString         as BS
+import qualified Data.ByteString.Lazy    as BL
 import           Data.Int
-import qualified Data.IntMap          as IM
-import qualified Data.IntSet          as IS
-import qualified Data.Map             as M
+import qualified Data.IntMap             as IM
+import qualified Data.IntSet             as IS
+import qualified Data.Map                as M
+import qualified Data.Text.Internal      as T (Text(..)) 
+import qualified Data.Text.Lazy.Internal as TL
 import           Data.Word
-import qualified Foreign.Storable     as FS
+import qualified Foreign.Storable        as FS
+
+-- import qualified Data.ByteString.Short as SS -- requires bytestring-0.10.4
 
 -- ----------------------------------------
 
@@ -248,11 +251,12 @@ ShortByteString: 4 words; 32 or 64 bytes + word aligned number of bytes
 
 instance Sizeable BS.ByteString where
     dataOf bs
-        = dataOfObj $
-          (8 .*. dataOfPtr)                             -- 8 words for length field and pointers
+        = (8 .*. dataOfPtr)                             -- 8 words for length field and pointers
           <> (wordAlign $                               -- size of byte sequence
               BS.length bs .*. dataOf (undefined ::Word8)
              )
+--  bytesOf
+--      = dataOfObj . dataOf                            -- default impl.
 
     statsOf s
         = mkStats s
@@ -294,6 +298,39 @@ instance Sizeable BL.ByteString where
     bytesOf             -- ByteString is handled as a single object,
         = dataOf        -- all space is already accumulated in dataOf
 
+    statsOf
+        = mkStats
+
+-- ------------------------------------------------------------
+
+-- the overhead of 8 words + constructor word is copied from
+-- ByteString. Precise figures not yet found, except the issue,
+-- that Text is the same as a ByteString with Word16 instead of Word8
+-- for the real data 
+
+instance Sizeable T.Text where
+    dataOf (T.Text _payload _offset len)
+        = (8 .*. dataOfPtr)                             -- 8 words for length field and pointers
+          <> (wordAlign $                               -- size of Word16 sequence
+              len .*. dataOf (undefined::Word16)
+             )
+
+    statsOf
+        = mkStats
+
+instance Sizeable TL.Text where
+    nameOf
+        = (++ " (lazy)") . typeName
+
+    dataOf (TL.Empty )
+        = dataOfSingleton
+    dataOf (TL.Chunk c r)
+        = dataOfObj $ dataOf c <> dataOf r
+                        -- dataOf c, not bytesOf c, because c is an unpacked strict field
+
+    bytesOf             -- lazy Text is counted as a single object
+        = dataOf        -- all space is already accumulated in dataOf
+ 
     statsOf
         = mkStats
 
