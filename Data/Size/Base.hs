@@ -37,6 +37,7 @@ module Data.Size.Base
     , (<>)
     )
 where
+import           Control.DeepSeq
 
 import qualified Data.List        as L
 import qualified Data.Map.Strict  as M
@@ -125,8 +126,8 @@ dataOfObj w@(Bytes bs _al)
 
 data Size
     = Size
-      { _objCnt  :: ! Int
-      , _byteCnt :: ! Int
+      { _objCnt  :: {-# UNPACK #-} ! Int
+      , _byteCnt :: {-# UNPACK #-} ! Int
       }
     deriving (Eq, Show)
 
@@ -175,33 +176,37 @@ newtype SizeTable
       deriving (Show)
 
 instance Monoid SizeTable where
-    mempty = ST M.empty
+    mempty = ST $! M.empty
     mappend (ST t1) (ST t2)
-        = ST $ M.unionWith (<>) t1 t2
+        = ST $! M.unionWith (<>) t1 t2
     mconcat
         = L.foldl' mappend mempty
 
 instance Scale SizeTable where
     i .*. (ST t)
         | i == 0    = mempty
-        | otherwise = ST $ M.map (i .*.) t
+        | otherwise = ST $! M.map (i .*.) t
 
 -- --------------------
 
 data SizeStatistics
     = SST
-      { _nameof :: String
-      , _accu   :: Size
-      , _parts  :: SizeTable
+      { _nameof :: ! String
+      , _accu   :: ! Size
+      , _parts  :: ! SizeTable
       }
 --    deriving Show
+
+mkSST :: String -> Size -> SizeTable -> SizeStatistics
+mkSST n c t
+    = rnf n `seq` SST n c t
 
 instance Show SizeStatistics where show = showStats
 
 instance Monoid SizeStatistics where
-    mempty = SST "" mempty mempty
+    mempty = mkSST "" mempty mempty
     mappend (SST n1 c1 t1) (SST n2 c2 t2)
-        = SST n c t
+        = mkSST n c t
           where
             n = if null n1 then n2 else n1
             c = c1 <> c2
@@ -211,7 +216,7 @@ instance Monoid SizeStatistics where
 
 instance Scale  SizeStatistics where
     i .*. (SST n c t)
-        = SST n (i .*. c) (i .*. t)
+        = mkSST n (i .*. c) (i .*. t)
 
 -- --------------------
 
@@ -234,8 +239,10 @@ class (Typeable a) => Sizeable a where
 
 
 typeName :: Typeable a => a -> String
-typeName
-    = show . typeOf
+typeName x
+    = (tyConModule . fst . splitTyConApp $ t) ++ "." ++ show t
+      where
+        t = typeOf x
 
 -- ------------------------------------------------------------
 

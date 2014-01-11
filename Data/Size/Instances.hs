@@ -4,19 +4,19 @@
 module Data.Size.Instances
 where
 
-import qualified Data.List            as L
+import qualified Data.List                     as L
 import           Data.Size.Base
 
-import qualified Data.ByteString         as BS
-import qualified Data.ByteString.Lazy    as BL
+import qualified Data.ByteString.Internal      as BS
+import qualified Data.ByteString.Lazy.Internal as BL
 import           Data.Int
-import qualified Data.IntMap             as IM
-import qualified Data.IntSet             as IS
-import qualified Data.Map                as M
-import qualified Data.Text.Internal      as T (Text(..)) 
-import qualified Data.Text.Lazy.Internal as TL
+import qualified Data.IntMap                   as IM
+import qualified Data.IntSet                   as IS
+import qualified Data.Map.Strict               as M
+import qualified Data.Text.Internal            as T (Text (..))
+import qualified Data.Text.Lazy.Internal       as TL
 import           Data.Word
-import qualified Foreign.Storable        as FS
+import qualified Foreign.Storable              as FS
 
 -- import qualified Data.ByteString.Short as SS -- requires bytestring-0.10.4
 
@@ -61,6 +61,14 @@ dataOfFloat
 dataOfDouble :: Bytes
 dataOfDouble
     = dataOfStorable (undefined :: Double)
+
+dataOfWord8 :: Bytes
+dataOfWord8
+    = dataOf (undefined ::Word8)
+
+dataOfWord16 :: Bytes
+dataOfWord16
+    = dataOf (undefined::Word16)
 
 -- --------------------
 
@@ -250,16 +258,24 @@ ShortByteString: 4 words; 32 or 64 bytes + word aligned number of bytes
 -}
 
 instance Sizeable BS.ByteString where
-    dataOf bs
+    dataOf (BS.PS _payload _offset len)
         = (8 .*. dataOfPtr)                             -- 8 words for length field and pointers
           <> (wordAlign $                               -- size of byte sequence
-              BS.length bs .*. dataOf (undefined ::Word8)
+              len .*. dataOfWord8
              )
---  bytesOf
---      = dataOfObj . dataOf                            -- default impl.
 
-    statsOf s
-        = mkStats s
+    statsOf x@(BS.PS _payload offset len)
+        = st3
+          where
+            tn  = nameOf x
+            st1 = mkStats x                             -- extra statistics for real payload
+                                                        -- and overhead by unused prefixes
+            st2 =     addPart tn "<chars>"   (mkSize $    len .*. dataOfWord8) st1
+            st3 | offset == 0
+                    = st2
+                | otherwise
+                    = addPart tn "<offsets>" (mkSize $ offset .*. dataOfWord8) st2
+
 
 {- requires bytestring-0.10.4
 
@@ -285,53 +301,57 @@ instance Sizeable SS.ShortByteString where
 -}
 
 instance Sizeable BL.ByteString where
-    nameOf
-        = (++ " (lazy)") . typeName
+    dataOf (BL.Empty)
+        = dataOfSingleton
 
-    dataOf bs
-        = length cs .*. (dataOfObj $ dataOfPtr <> dataOfPtr)
-          <>
-          (mconcat . L.map bytesOf $ cs)
-        where
-          cs = BL.toChunks bs
+    dataOf (BL.Chunk _c _r)
+        = 1 .*. dataOfPtr
+          -- c is not counted here, because it's counted in statsOf c
+          -- but it's an unpacked field (a bit tricky)
 
-    bytesOf             -- ByteString is handled as a single object,
-        = dataOf        -- all space is already accumulated in dataOf
-
-    statsOf
-        = mkStats
+    statsOf x
+       = case x of
+            (BL.Empty    ) -> constrStats "Empty" x
+            (BL.Chunk c r) -> constrStats "Chunk" x <> statsOf c <> statsOf r
 
 -- ------------------------------------------------------------
 
 -- the overhead of 8 words + constructor word is copied from
 -- ByteString. Precise figures not yet found, except the issue,
 -- that Text is the same as a ByteString with Word16 instead of Word8
--- for the real data 
+-- for the real data
 
 instance Sizeable T.Text where
     dataOf (T.Text _payload _offset len)
         = (8 .*. dataOfPtr)                             -- 8 words for length field and pointers
           <> (wordAlign $                               -- size of Word16 sequence
-              len .*. dataOf (undefined::Word16)
+              len .*. dataOfWord16
              )
 
-    statsOf
-        = mkStats
+    statsOf x@(T.Text _payload offset len)
+        = st3
+          where
+            tn  = nameOf x
+            st1 = mkStats x                             -- extra statistics for real payload
+                                                        -- and overhead by unused prefixes
+            st2 =     addPart tn "<chars>"   (mkSize $    len .*. dataOfWord16) st1
+            st3 | offset == 0
+                    = st2
+                | otherwise
+                    = addPart tn "<offsets>" (mkSize $ offset .*. dataOfWord16) st2
 
 instance Sizeable TL.Text where
-    nameOf
-        = (++ " (lazy)") . typeName
-
     dataOf (TL.Empty )
         = dataOfSingleton
-    dataOf (TL.Chunk c r)
-        = dataOfObj $ dataOf c <> dataOf r
-                        -- dataOf c, not bytesOf c, because c is an unpacked strict field
 
-    bytesOf             -- lazy Text is counted as a single object
-        = dataOf        -- all space is already accumulated in dataOf
- 
-    statsOf
-        = mkStats
+    dataOf (TL.Chunk _c _r)
+        = 1 .*. dataOfPtr
+          -- c is not counted here, because it's counted in statsOf c
+          -- but it's an unpacked field (a bit tricky)
+
+    statsOf x
+        = case x of
+            (TL.Empty    ) -> constrStats "Empty" x
+            (TL.Chunk c r) -> constrStats "Chunk" x <> statsOf c <> statsOf r
 
 -- ------------------------------------------------------------
