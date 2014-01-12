@@ -21,7 +21,8 @@ library
                        Data.Size.Base
   other-modules:       Data.Size.Instances
 
-  other-extensions:    DeriveDataTypeable
+  other-extensions:    DefaultSignatures
+                     , DeriveDataTypeable
                      , BangPatterns
 
   build-depends:       base        >= 4.6 && < 5
