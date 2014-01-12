@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DefaultSignatures #-}
 
 module Data.Size.Base
     ( Bytes
@@ -225,13 +226,14 @@ class Monoid a => Scale a where
 
 -- --------------------
 
-class (Typeable a) => Sizeable a where
+class Sizeable a where
     nameOf    :: a -> String
     dataOf    :: a -> Bytes
     bytesOf   :: a -> Bytes
     objectsOf :: a -> Size
     statsOf   :: a -> SizeStatistics
 
+    default nameOf :: Typeable a => a -> String
     nameOf      = typeName
     bytesOf     = dataOfObj . dataOf
     objectsOf   = _accu . statsOf

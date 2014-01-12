@@ -5,7 +5,6 @@ module Data.Size.Instances
 where
 
 import qualified Data.List                     as L
-import           Data.Size.Base
 
 import qualified Data.ByteString.Internal      as BS
 import qualified Data.ByteString.Lazy.Internal as BL
@@ -13,9 +12,12 @@ import           Data.Int
 import qualified Data.IntMap                   as IM
 import qualified Data.IntSet                   as IS
 import qualified Data.Map.Strict               as M
+import           Data.Size.Base
 import qualified Data.Text.Internal            as T (Text (..))
 import qualified Data.Text.Lazy.Internal       as TL
+import           Data.Typeable
 import           Data.Word
+
 import qualified Foreign.Storable              as FS
 
 -- import qualified Data.ByteString.Short as SS -- requires bytestring-0.10.4
@@ -72,7 +74,11 @@ dataOfWord16
 
 -- --------------------
 
-instance (Sizeable t1, Sizeable t2) => Sizeable (t1, t2) where
+instance ( Sizeable t1, Sizeable t2
+         , Typeable t1, Typeable t2
+         ) =>
+    Sizeable (t1, t2) where
+
     dataOf (_x1, _x2)
         = 2 .*. dataOfPtr
 
@@ -83,8 +89,11 @@ instance (Sizeable t1, Sizeable t2) => Sizeable (t1, t2) where
 
 -- --------------------
 
-instance (Sizeable t1, Sizeable t2, Sizeable t3) =>
+instance ( Sizeable t1, Sizeable t2, Sizeable t3
+         , Typeable t1, Typeable t2, Typeable t3
+         ) =>
          Sizeable (t1, t2, t3) where
+
     dataOf (_x1, _x2, _x3)
         = 3 .*. dataOfPtr
 
@@ -95,8 +104,11 @@ instance (Sizeable t1, Sizeable t2, Sizeable t3) =>
 
 -- --------------------
 
-instance (Sizeable t1, Sizeable t2, Sizeable t3, Sizeable t4) =>
-         Sizeable (t1, t2, t3, t4) where
+instance ( Sizeable t1, Sizeable t2, Sizeable t3, Sizeable t4
+         , Typeable t1, Typeable t2, Typeable t3, Typeable t4
+         ) =>
+    Sizeable (t1, t2, t3, t4) where
+
     dataOf (_x1, _x2, _x3, _x4)
         = 4 .*. dataOfPtr
 
@@ -107,7 +119,7 @@ instance (Sizeable t1, Sizeable t2, Sizeable t3, Sizeable t4) =>
 
 -- --------------------
 
-instance (Sizeable t) => Sizeable (Maybe t) where
+instance (Sizeable t, Typeable t) => Sizeable (Maybe t) where
     dataOf x
         = case x of
             Just _  -> dataOfPtr
@@ -120,7 +132,11 @@ instance (Sizeable t) => Sizeable (Maybe t) where
 
 -- --------------------
 
-instance (Sizeable t1, Sizeable t2) => Sizeable (Either t1 t2) where
+instance ( Sizeable t1, Sizeable t2
+         , Typeable t1, Typeable t2
+         ) =>
+    Sizeable (Either t1 t2) where
+
     dataOf x
         = case x of
             Left  _ -> dataOfPtr
@@ -136,7 +152,7 @@ instance (Sizeable t1, Sizeable t2) => Sizeable (Either t1 t2) where
 -- in list statistics the constructors ([] and (:) are not counted
 -- just the # of lists and the total # of cells used for all the (:) nodes
 
-instance Sizeable a => Sizeable [a] where
+instance (Sizeable a, Typeable a) => Sizeable [a] where
     dataOf xs
         = length xs .*. (dataOfConstr <> (2 .*. dataOfPtr))
 
@@ -190,7 +206,7 @@ instance Sizeable IS.IntSet where
 
 -- --------------------
 
-instance Sizeable v => Sizeable (IM.IntMap v) where
+instance (Sizeable v, Typeable v) => Sizeable (IM.IntMap v) where
     dataOf m
         | IM.null m
             = dataOfSingleton
@@ -211,7 +227,11 @@ instance Sizeable v => Sizeable (IM.IntMap v) where
 
 -- --------------------
 
-instance (Sizeable k, Sizeable v) => Sizeable (M.Map k v) where
+instance ( Sizeable k, Sizeable v
+         , Typeable k, Typeable v
+         ) =>
+    Sizeable (M.Map k v) where
+
     dataOf m
         | M.null m
             = dataOfSingleton
