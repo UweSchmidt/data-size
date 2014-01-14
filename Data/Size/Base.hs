@@ -1,4 +1,3 @@
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DefaultSignatures #-}
 
 module Data.Size.Base
@@ -29,10 +28,12 @@ module Data.Size.Base
     , addPart
     , mkObject
     , mkStats
+    , mkStats'
     , constrStats
+    , constrStats'
     , showStats
 
-    , mempty            -- re-export of Monoid
+    , mempty            -- re-exports of Monoid
     , mappend
     , mconcat
     , (<>)
@@ -227,31 +228,46 @@ class Monoid a => Scale a where
 -- --------------------
 
 class Sizeable a where
-    nameOf    :: a -> String
-    dataOf    :: a -> Bytes
-    bytesOf   :: a -> Bytes
-    objectsOf :: a -> Size
-    statsOf   :: a -> SizeStatistics
+    dataOf     :: a -> Bytes
+    bytesOf    :: a -> Bytes
+    objectsOf  :: a -> Size
+    statsOf    :: a -> SizeStatistics
 
-    default nameOf :: Typeable a => a -> String
-    nameOf      = typeName
-    bytesOf     = dataOfObj . dataOf
-    objectsOf   = _accu . statsOf
-    statsOf     = mkStats
+    bytesOf    = dataOfObj . dataOf
+    objectsOf  = _accu . statsOf
+    statsOf    = mkStats' (const "<type with no name>")
 
+mkStats :: (Typeable a, Sizeable a) => a -> SizeStatistics
+mkStats = mkStats' typeName
 
-typeName :: Typeable a => a -> String
+typeName :: (Typeable a) => a -> String
 typeName x
     = (tyConModule . fst . splitTyConApp $ t) ++ "." ++ show t
       where
         t = typeOf x
 
+constrStats :: (Typeable a, Sizeable a) => String -> a -> SizeStatistics
+constrStats cn x
+    = constrStats' typeName cn x
+
+mkStats' :: (Sizeable a) => (a -> String) -> a -> SizeStatistics
+mkStats' f  = constrStats' f ""
+
+constrStats' :: (Sizeable a) => (a -> String) -> String -> a -> SizeStatistics
+constrStats' nameOf cn x
+    = st3
+    where
+      nm  = nameOf x
+      cnt = mkObject x
+      st1 = addSize cnt $ setName nm $ mempty   -- add the stats for the datatype
+      st2 = addPart nm "" cnt st1
+      st3 | null cn   =                   st2
+          | otherwise = addPart nm cn cnt st2   -- add the stats for the constructor
+
 -- ------------------------------------------------------------
 
 insertSizeTable :: (String, String) -> Size -> SizeTable -> SizeTable
 insertSizeTable tn v (ST t) = ST $ M.insertWith (<>) tn v t
-
--- ------------------------------------------------------------
 
 setName :: String -> SizeStatistics -> SizeStatistics
 setName n st
@@ -265,26 +281,14 @@ addPart :: String -> String -> Size ->  SizeStatistics -> SizeStatistics
 addPart tn cn c st
     = st { _parts = insertSizeTable (tn, cn) c $ _parts st }
 
-mkObject :: Sizeable a => a -> Size
+mkObject :: (Sizeable a) => a -> Size
 mkObject x
     | n == 0    = singletonSize
     | otherwise = Size 1 n
     where
       (Bytes n _) = bytesOf x
 
-mkStats :: (Sizeable a) => a -> SizeStatistics
-mkStats = constrStats ""
-
-constrStats :: (Sizeable a) => String -> a -> SizeStatistics
-constrStats cn x
-    = st3
-    where
-      nm  = nameOf x
-      cnt = mkObject x
-      st1 = addSize cnt $ setName nm $ mempty   -- add the stats for the datatype
-      st2 = addPart nm "" cnt st1
-      st3 | null cn   =                   st2
-          | otherwise = addPart nm cn cnt st2   -- add the stats for the constructor
+-- ------------------------------------------------------------
 
 showStats :: SizeStatistics -> String
 showStats (SST name (Size oc bc) (ST parts))

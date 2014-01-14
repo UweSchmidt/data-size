@@ -24,21 +24,60 @@ import qualified Foreign.Storable              as FS
 
 -- ----------------------------------------
 
-instance Sizeable Bool   where dataOf = dataOfStorable
-instance Sizeable Int    where dataOf = dataOfStorable
-instance Sizeable Char   where dataOf = dataOfStorable
-instance Sizeable Float  where dataOf = dataOfStorable
-instance Sizeable Double where dataOf = dataOfStorable
+instance Sizeable Bool   where
+    dataOf  = dataOfStorable
+    statsOf = mkStats
 
-instance Sizeable Word8  where dataOf = dataOfStorable
-instance Sizeable Word16 where dataOf = dataOfStorable
-instance Sizeable Word32 where dataOf = dataOfStorable
-instance Sizeable Word64 where dataOf = dataOfStorable
+instance Sizeable Int    where
+    dataOf  = dataOfStorable
+    statsOf = mkStats
 
-instance Sizeable Int8   where dataOf = dataOfStorable
-instance Sizeable Int16  where dataOf = dataOfStorable
-instance Sizeable Int32  where dataOf = dataOfStorable
-instance Sizeable Int64  where dataOf = dataOfStorable
+instance Sizeable Char   where
+    dataOf  = dataOfStorable
+    statsOf = mkStats
+
+instance Sizeable Float  where
+    dataOf  = dataOfStorable
+    statsOf = mkStats
+
+instance Sizeable Double where
+    dataOf  = dataOfStorable
+    statsOf = mkStats
+
+
+instance Sizeable Word8  where
+    dataOf  = dataOfStorable
+    statsOf = mkStats
+
+instance Sizeable Word16 where
+    dataOf  = dataOfStorable
+    statsOf = mkStats
+
+instance Sizeable Word32 where
+    dataOf  = dataOfStorable
+    statsOf = mkStats
+
+instance Sizeable Word64 where
+    dataOf  = dataOfStorable
+    statsOf = mkStats
+
+
+instance Sizeable Int8   where
+    dataOf  = dataOfStorable
+    statsOf = mkStats
+
+instance Sizeable Int16  where
+    dataOf  = dataOfStorable
+    statsOf = mkStats
+
+instance Sizeable Int32  where
+    dataOf  = dataOfStorable
+    statsOf = mkStats
+
+instance Sizeable Int64  where
+    dataOf  = dataOfStorable
+    statsOf = mkStats
+
 
 dataOfStorable :: FS.Storable a => a -> Bytes
 dataOfStorable x
@@ -71,6 +110,10 @@ dataOfWord8
 dataOfWord16 :: Bytes
 dataOfWord16
     = dataOf (undefined::Word16)
+
+dataOfWord32 :: Bytes
+dataOfWord32
+    = dataOf (undefined::Word32)
 
 -- --------------------
 
@@ -163,7 +206,7 @@ instance (Sizeable a, Typeable a) => Sizeable [a] where
         | null xs
             = mkStats xs
 
-        | nameOf hd `elem` ["Char", "Int", "Double", "Float", "Bool"]
+        | isGHCPrim (typeName hd)
             = mkStats xs
               <>
               len .*. statsOf hd
@@ -175,6 +218,10 @@ instance (Sizeable a, Typeable a) => Sizeable [a] where
         where
           hd  = head xs
           len = length xs
+          isGHCPrim n
+              = "GHC.Types." `L.isPrefixOf` n
+                &&
+                drop 10 n `elem` ["Char", "Int", "Double", "Float", "Bool"]
 
 -- --------------------
 
@@ -287,7 +334,7 @@ instance Sizeable BS.ByteString where
     statsOf x@(BS.PS _payload offset len)
         = st3
           where
-            tn  = nameOf x
+            tn  = typeName x
             st1 = mkStats x                             -- extra statistics for real payload
                                                         -- and overhead by unused prefixes
             st2 =     addPart tn "<chars>"   (mkSize $    len .*. dataOfWord8) st1
@@ -351,7 +398,7 @@ instance Sizeable T.Text where
     statsOf x@(T.Text _payload offset len)
         = st3
           where
-            tn  = nameOf x
+            tn  = typeName x
             st1 = mkStats x                             -- extra statistics for real payload
                                                         -- and overhead by unused prefixes
             st2 =     addPart tn "<chars>"   (mkSize $    len .*. dataOfWord16) st1
