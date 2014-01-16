@@ -4,23 +4,22 @@
 module Data.Size.Instances
 where
 
-import qualified Data.List                     as L
+import qualified Data.List                      as L
 
-import qualified Data.ByteString.Internal      as BS
-import qualified Data.ByteString.Lazy.Internal as BL
+import qualified Data.ByteString.Internal       as BS
+import qualified Data.ByteString.Lazy.Internal  as BL
+import qualified Data.ByteString.Short          as SS
 import           Data.Int
-import qualified Data.IntMap                   as IM
-import qualified Data.IntSet                   as IS
-import qualified Data.Map.Strict               as M
+import qualified Data.IntMap                    as IM
+import qualified Data.IntSet                    as IS
+import qualified Data.Map.Strict                as M
 import           Data.Size.Base
-import qualified Data.Text.Internal            as T (Text (..))
-import qualified Data.Text.Lazy.Internal       as TL
+import qualified Data.Text.Internal             as T (Text (..))
+import qualified Data.Text.Lazy.Internal        as TL
 import           Data.Typeable
 import           Data.Word
 
 import qualified Foreign.Storable              as FS
-
--- import qualified Data.ByteString.Short as SS -- requires bytestring-0.10.4
 
 -- ----------------------------------------
 
@@ -335,7 +334,7 @@ instance Sizeable BS.ByteString where
         = st3
           where
             tn  = typeName x
-            st1 = mkStats x                             -- extra statistics for real payload
+            st1 = mkStats  x                            -- extra statistics for real payload
                                                         -- and overhead by unused prefixes
             st2 =     addPart tn "<chars>"   (mkSize $    len .*. dataOfWord8) st1
             st3 | offset == 0
@@ -343,22 +342,19 @@ instance Sizeable BS.ByteString where
                 | otherwise
                     = addPart tn "<offsets>" (mkSize $ offset .*. dataOfWord8) st2
 
-
-{- requires bytestring-0.10.4
-
 instance Sizeable SS.ShortByteString where
     dataOf bs
-        = dataOfObj $ bytesOf bs
-
-    bytesOf bs
         = (3 .*. dataOfPtr)                             -- 3 words for length field and pointers
           <> (wordAlign $                               -- size of byte sequence
-              BS.length bs .*. dataOf (undefined ::Word8)
+              SS.length bs .*. dataOf (undefined ::Word8)
              )
 
-    statsOf s
-        = mkStats s
--}
+    statsOf x
+        = st2
+          where
+            tn  = typeName x
+            st1 = mkStats  x
+            st2 = addPart tn "<chars>" (mkSize $ SS.length x .*. dataOfWord8) st1
 
 -- --------------------
 
