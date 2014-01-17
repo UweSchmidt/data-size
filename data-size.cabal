@@ -26,7 +26,7 @@ library
                      , BangPatterns
 
   build-depends:       base        >= 4.6    && < 5
-                     , bytestring  >= 0.10.4
+                     , bytestring  >  0.10.0.2
                      , containers  >= 0.5
                      , deepseq     >= 1.2
                      , text        >= 0.11.1

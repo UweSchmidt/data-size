@@ -4,18 +4,18 @@
 module Data.Size.Instances
 where
 
-import qualified Data.List                      as L
+import qualified Data.List                     as L
 
-import qualified Data.ByteString.Internal       as BS
-import qualified Data.ByteString.Lazy.Internal  as BL
-import qualified Data.ByteString.Short          as SS
+import qualified Data.ByteString.Internal      as BS
+import qualified Data.ByteString.Lazy.Internal as BL
+import qualified Data.ByteString.Short         as SS
 import           Data.Int
-import qualified Data.IntMap                    as IM
-import qualified Data.IntSet                    as IS
-import qualified Data.Map.Strict                as M
+import qualified Data.IntMap                   as IM
+import qualified Data.IntSet                   as IS
+import qualified Data.Map.Strict               as M
 import           Data.Size.Base
-import qualified Data.Text.Internal             as T (Text (..))
-import qualified Data.Text.Lazy.Internal        as TL
+import qualified Data.Text.Internal            as T (Text (..))
+import qualified Data.Text.Lazy.Internal       as TL
 import           Data.Typeable
 import           Data.Word
 
@@ -113,6 +113,15 @@ dataOfWord16
 dataOfWord32 :: Bytes
 dataOfWord32
     = dataOf (undefined::Word32)
+
+-- --------------------
+
+instance Sizeable () where
+    dataOf _x
+        = dataOfSingleton
+
+    statsOf
+        = mkStats
 
 -- --------------------
 
