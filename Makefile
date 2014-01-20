@@ -41,5 +41,4 @@ push	:
 pull	:
 	git pull --rebase --tags origin master
 
-.PHONY	: all init push pull delete
-
+.PHONY	: all all1 init depends install heap-view depends-heap-view install-heap-view delete push pull
