@@ -13,8 +13,12 @@ maintainer:          uwe@fh-wedel.de
 copyright:           2013 Uwe Schmidt
 category:            Testing
 build-type:          Simple
--- extra-source-files:  
+
 cabal-version:       >=1.10
+
+flag with-heap-view
+  description:         Used for tests with ghc-7.6 and bytestring-0.10.0.2
+  default:             False
 
 library
   exposed-modules:     Data.Size
@@ -26,10 +30,14 @@ library
                      , BangPatterns
 
   build-depends:       base        >= 4.6    && < 5
-                     , bytestring  >  0.10.0.2
                      , containers  >= 0.5
                      , deepseq     >= 1.2
                      , text        >= 0.11.1
+  if flag(with-heap-view)
+    build-depends:     bytestring  <= 0.10.0.2
+                     , short-bytestring
+  else
+    build-depends:     bytestring  >  0.10.0.2
 
   hs-source-dirs:      .
 
