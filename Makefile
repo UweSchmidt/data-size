@@ -1,5 +1,6 @@
 all	:
-	@echo "available targets: all1 init depends install heap-view depends-heap-view install-heap-view delete push pull"
+	@echo "available targets:"\
+	"all1 init depends install heap-view depends-heap-view install-heap-view delete push pull"
 
 all1	:
 	$(MAKE) delete || true
@@ -29,7 +30,7 @@ depends-heap-view	:
 	cabal install --flags=with-heap-view --dependencies-only --force-reinstall
 
 install-heap-view	:
-	cabal install --flags=with-heap-view
+	cabal install --flags=with-heap-view --force-reinstall
 
 delete	:
 	cabal sandbox delete
